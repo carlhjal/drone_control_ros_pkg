@@ -1,0 +1,20 @@
+<launch>
+<!-- start up world -->
+  <include file="$(find potential_field)/launch/map.launch"/>
+  <include file="$(find robotont_navigation)/launch/move_base.launch"/>
+  <remap from="cmd_vel" to="cmd_vel_robotont"/>
+  <include file="$(find potential_field)/launch/robotont_custom.launch"/>
+
+
+  <!-- load map -->
+  <node pkg="potential_field" name="potential_field" type="potential_field.py" output="screen"/>
+  <node pkg="potential_field" name="compute_velocity" type="compute_velocity.py" output="screen"/>
+  <node type="rviz" name="rviz" pkg="rviz"/>
+
+    <node pkg="tf" type="static_transform_publisher" name="base_footprint"
+   args="0 0 0 0 0 0 1 map base_footprint 100"/>
+
+       <node pkg="tf" type="static_transform_publisher" name="base_link"
+   args="0 0 0 0 0 0 1 map base_link 100"/>
+
+</launch>
