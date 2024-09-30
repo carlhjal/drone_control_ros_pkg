@@ -23,7 +23,7 @@ class safe_teleop:
         self.max_vel_x = 1
         self.min_vel_y = -1
         self.max_vel_y = 1
-        self.drive_scale = 0.1 # scaling factor to scale the self.drive_scale = 0.1orce
+        self.drive_scale = 0.5 # scaling factor to scale the self.drive_scale = 0.1orce
 
 #-------------------------------------------------
 
@@ -32,6 +32,7 @@ class safe_teleop:
         while not rospy.is_shutdown():
             cmd = self.compute_motion_cmd()
             if cmd != None:
+                #print(f"publishing.. {cmd}")
                 self.cmd_pub.publish(cmd)
             rate.sleep()
 
@@ -51,18 +52,14 @@ class safe_teleop:
 
             angle = np.arctan2(vel_y, vel_x)
             mag = np.sqrt(vel_y**2 + vel_x**2)
-            vx = np.cos(angle) / mag
-            vy = np.sin(angle) / mag
-            vx = np.clip(vx, self.min_vel_x, self.max_vel_x)
-            vy = np.clip(vy, self.min_vel_y, self.max_vel_y)
+
+            vx = np.cos(angle)
+            vy = np.sin(angle)
+            vx = np.clip(vx, self.min_vel_x, self.max_vel_x) * mag
+            vy = np.clip(vy, self.min_vel_y, self.max_vel_y) * mag
 
             cmd.linear.x = vx
             cmd.linear.y = vy
-
-            #print(f"x: {vx}, y: {vy}")
-
-            cmd.linear.x = 1
-            cmd.linear.y = 1
 
         return cmd
 
