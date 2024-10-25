@@ -43,10 +43,10 @@ class potential_field:
         self.path_robot.header.frame_id = 'map'
 
         ## TODO Choose suitable values
-        self.eta = 0.3 # scaling factor for repulsive force
-        self.zeta = 0.3 # scaling factor for attractive force
-        self.q_star = 2 # threshold distance for obstacles
-        self.d_star = 2 # threshoild distance for goal
+        self.eta = 0.5 # scaling factor for repulsive force
+        self.zeta = 0.5 # scaling factor for attractive force
+        self.q_star = 3 # threshold distance for obstacles
+        self.d_star = 1.5 # threshoild distance for goal
 
         self.laser = None
         self.odom = None
@@ -62,6 +62,18 @@ class potential_field:
         # Boolean variables used for proper display of robot path and global path
         self.bool_goal = False
         self.bool_path = False
+
+        # this determines the iterations the robot tries out a random move to escape local minimi
+        self.random_nudge_iters = 8
+        self.random_nudge_counter = 0
+        self.noise = np.zeros(2)
+        self.movement_history = np.zeros((self.random_nudge_iters, 2))
+        self.average_movement = 0
+        # list containing the last tried random moves and how much average movement they resulted in 
+        # the robot will tend its random movements toward those that seem to bring it out of the local minimum more
+        self.average_movement_random_motion = np.zeros((self.random_nudge_iters, 3))
+        self.cooldown = 10
+
 #------------------------------------------
 
     def start(self):
@@ -71,8 +83,24 @@ class potential_field:
                 self.global_path_pub.publish(self.path_data)
            
             self.robot_path_publish()
-            net_force = self.compute_attractive_force() + self.compute_repulsive_force() ## What should be the net force? self.compute_attractive_force
-            #print(net_force)
+            net_force = self.compute_attractive_force() ## What should be the net force? self.compute_attractive_force
+            net_force += self.compute_repulsive_force()
+            #print(f"this is the net force: {net_force}")
+            random_force  = self.random_nudge(net_force)
+            print(f"net_force: {net_force}")
+            print(f"random_force: {random_force}")
+            net_force += random_force
+
+            
+            self.movement_history[0] = net_force
+            self.movement_history = np.roll(self.movement_history, 1, axis=0)
+            self.average_movement = np.average(np.linalg.norm(self.movement_history))
+            print(f"average movement: {self.average_movement}")
+
+            #self.average_movement_random_motion[0] = np.hstack([self.average_movement, random_force])
+            #self.average_movement_random_motion = np.roll(self.average_movement_random_motion, 1, axis=0)
+            #print(f"average movement and random force: {self.average_movement_random_motion}")
+
             self.publish_sum(net_force[0],net_force[1])
 
             rate.sleep()
@@ -92,36 +120,113 @@ class potential_field:
             self.robot_path_pub.publish(self.path_robot)
 
 #------------------------------------------
+    def random_nudge(self, net_force):
+        """
+        Check if robot is not moving, and then if its close or not
+        If its not close and is not moving then this will try to nudge the robot
+        """
+        empty_arr = np.zeros(2)
+
+        if self.odom == None or self.goal == None:
+            print("No target")
+            return empty_arr 
+        
+        # if moving and isnt already trying to nudge: return
+        if self.average_movement > 0.1 and self.noise[0] == 0:
+            print("apparently its moving")
+            self.noise = empty_arr
+            return empty_arr 
+
+        odom_data = self.odom
+        pos_x = odom_data.pose.pose.position.x
+        pos_y = odom_data.pose.pose.position.y
+        dist_to_goal = np.sqrt((pos_x - self.goal.pose.position.x)**2 + (pos_y - self.goal.pose.position.y)**2)
+
+        # if already close: return
+        if dist_to_goal < self.d_star:
+            print("already close enough")
+            self.noise = empty_arr
+            return empty_arr
+        
+        # if already tried this random motion for self.random_nudge_iters iterations: return same motion
+        if self.random_nudge_counter < self.random_nudge_iters:
+            print("nudging")
+            self.random_nudge_counter += 1
+            return np.array([self.noise[0], self.noise[1]])
+
+        # if broken out of local minimum
+        if (self.average_movement > 0.8 and self.is_away_from_obstacles()) or self.average_movement > 1.5:
+            print("Back to normal")
+            if np.linalg.norm(self.noise) > 0.25:
+                self.noise = self.noise * 0.8
+            else:
+                self.noise = np.zeros(2)
+
+            # scrap earlier history, no longer needed
+            self.average_movement_random_motion = np.zeros((10, 3))
+            return self.noise
+        
+
+
+        away_vector_scaling = 0.7
+        away_vector = away_vector_scaling * self.compute_repulsive_force()
+
+        #best_move = np.
+        #self.average_movement_random_motion
+        self.average_movement_random_motion[0] = np.hstack([self.average_movement, self.noise])
+        #best_move_idx = np.argmax(self.average_movement_random_motion[:,0])
+        best_move_scaling = np.clip(np.max(self.average_movement_random_motion[:,0]), 0, 1)
+        best_move_vector = self.average_movement_random_motion[0,1:]
+        best_move = best_move_scaling * best_move_vector
+        
+        self.noise = np.random.uniform(-0.2+away_vector[0]+best_move[0],0.2+away_vector[0]+best_move[1],2)
+        self.random_nudge_counter = 0
+        
+        self.average_movement_random_motion = np.roll(self.average_movement_random_motion, 1, axis=0)
+        return np.array([self.noise[0], self.noise[1]])
+
+#------------------------------------------
+
+    def is_away_from_obstacles(self):
+        if self.laser == None or self.odom == None or self.goal == None:
+            return True
+        
+        laser_data = self.laser
+        ranges = np.array(laser_data.ranges)
+        
+        for distance in ranges:
+            if (distance < self.q_star):
+                return False
+        
+        return True
+                
 
     def compute_repulsive_force(self):
         if self.laser == None or self.odom == None or self.goal == None:
-            return (0,0)
+            return np.array([0.,0.])
     
         laser_data = self.laser
         ranges = np.array(laser_data.ranges)
         angle = laser_data.angle_min
         resolution = laser_data.angle_increment
         vector_sum = np.array([0.0,0.0])
-        
+        min_range = 0.1
+
         # The lidar outputs 360 degree data and therefore we get data of 360 points within the range of the sensor.
         # Each obstacle detected by the sensor will occupy some points out of these 360 points. We treat each single point as 
         # an individual obstacle.
         for distance in ranges:
-            if(distance<self.q_star):
-                
-                laser_data = self.laser
-                ranges = np.array(laser_data.ranges)
-                angle = laser_data.angle_min
-                resolution = laser_data.angle_increment
-                vector_sum = np.array([0.0, 0.0])
-                print(f"angle {ranges}")
-                mag = 0 ## What should be the magnitude of the repulsive force generated by each obstacle point?
+            x = 0
+            y = 0
 
-            else:
-                mag = 0 ## What should be the magnitude of repulsive force outside the region of "influence"?
-            
+            if(distance<self.q_star and distance>min_range):
+                ## What should be the magnitude of the repulsive force generated by each obstacle point?
+                mag = self.eta * (1 / self.q_star - 1 / distance) / (distance**2)
+                x = mag * np.cos(angle)
+                y = mag * np.sin(angle)
+
             # This is the negative gradient direction
-            vector = [0,0]
+            vector = np.array([x, y])
             vector_sum += vector ## You need to add the effect of all obstacle points
             angle += resolution
 
@@ -131,7 +236,7 @@ class potential_field:
 
     def compute_attractive_force(self):
         if self.odom == None or self.goal == None:
-            return (0,0)
+            return np.array([0.,0.])
 
         odom_data = self.odom
         pos_x = odom_data.pose.pose.position.x
@@ -154,15 +259,9 @@ class potential_field:
         ########
 
         if dist_to_goal <= self.d_star:
-            mag = -self.eta * np.array([pos_x - self.goal.pose.position.x, pos_y - self.goal.pose.position.y])
-
-
-            #x = self.eta * (np.sqrt(pos_x - self.goal.pose.position.x)**2)**2 / dist_to_goal
-            #y = self.eta * (np.sqrt(pos_y - self.goal.pose.position.y)**2)**2 / dist_to_goal
+            mag = -self.zeta * np.array([pos_x - self.goal.pose.position.x, pos_y - self.goal.pose.position.y])
         else:
-            mag = -self.d_star * self.eta * np.array([pos_x - self.goal.pose.position.x, pos_y - self.goal.pose.position.y]) / dist_to_goal
-
-            #x = self.eta * (np.sqrt((pos_x-self.goal.pose.position.x)**2 + (pos_y-self.goal.pose.position.y)**2))
+            mag = -self.d_star * self.zeta * np.array([pos_x - self.goal.pose.position.x, pos_y - self.goal.pose.position.y]) / dist_to_goal
     
         ## Your stuff
 

@@ -24,6 +24,9 @@ class safe_teleop:
         self.min_vel_y = -1
         self.max_vel_y = 1
         self.drive_scale = 0.5 # scaling factor to scale the self.drive_scale = 0.1orce
+        self.vx_1 = 0
+        self.vy_1 = 0
+
 
 #-------------------------------------------------
 
@@ -57,6 +60,12 @@ class safe_teleop:
             vy = np.sin(angle)
             vx = np.clip(vx, self.min_vel_x, self.max_vel_x) * mag
             vy = np.clip(vy, self.min_vel_y, self.max_vel_y) * mag
+
+            vx = vx*0.8 + 0.2*self.vx_1
+            vy = vy*0.8 + 0.2*self.vy_1
+
+            self.vx_1 = vx
+            self.vy_1 = vy
 
             cmd.linear.x = vx
             cmd.linear.y = vy

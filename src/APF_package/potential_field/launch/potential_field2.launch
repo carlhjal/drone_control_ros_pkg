@@ -9,7 +9,7 @@
   <!-- load map -->
   <node pkg="potential_field" name="potential_field" type="potential_field.py" output="screen"/>
   <node pkg="potential_field" name="compute_velocity" type="compute_velocity.py" output="screen"/>
-  <node type="rviz" name="rviz" pkg="rviz"/>
+  <node type="rviz" name="rviz" pkg="rviz" args="-d $(find potential_field)/potential_field.rviz" />
 
     <node pkg="tf" type="static_transform_publisher" name="base_footprint"
    args="0 0 0 0 0 0 1 map base_footprint 100"/>
