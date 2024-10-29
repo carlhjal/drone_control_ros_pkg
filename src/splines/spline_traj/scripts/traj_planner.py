@@ -105,8 +105,9 @@ class Traj_planner:
         self.kp = 0.5
         self.kd = 0.5
         
-        self.q_star = 0.4
+        self.q_star = 2
         self.obs_min_range = 0.02
+        self.eta = 0.3
 
         self.odom = None
         self.laser = None
@@ -116,13 +117,15 @@ class Traj_planner:
         while not rospy.is_shutdown():
             net_force = self.calc_next_goal()
             self.n_laser_scan(10)
-            #net_force = self.obstacle_avoidance(net_force)
-
+            print(f"net_force before: {net_force}")
+            net_force += self.obstacle_avoidance(net_force)
+            print(f"net_force after: {net_force}")
+            
             self.publish_sum(net_force[0],net_force[1])
             rate.sleep()
 
 
-    def n_laser_scan(self, n: int) -> np.ndarray:
+    def n_laser_scan(self, n: int) -> list:
         if self.laser == None or self.odom == None:
             return np.array([0.,0.])
     
@@ -136,54 +139,186 @@ class Traj_planner:
         # Each obstacle detected by the sensor will occupy some points out of these 360 points. We treat each single point as 
         # an individual obstacle.
 
-        readings = np.array((370, 2))
-        idx = np.argpartition(ranges, n)
-        n_closest = np.array([readings[idx],angle*idx])
-        print(n_closest)
-        # Normalization of the repulsive forces
+        idx = np.argpartition(ranges, n)[:n]
+        angles = resolution * idx
+        distances = ranges[idx]
+        #print(f"angles {angles}")
+        #print(f"distances {distances}")
+        
+        n_closest = np.vstack((distances, angles))
+
+        #print(f"n_closest {n_closest}")
+        print(n_closest.shape)
+        #n_closest = np.rot90(n_closest).tolist()
+        return n_closest
     
 
 ###########################################################
 
-    def compute_cbf(xo, yo, x_obs, y_obs, D_obs, x_goal, y_goal):
+    def compute_cbf(self, n_closest: np.ndarray):
+
+
+        if self.odom == None:
+            print("No target")
+            return np.array([0,0])
+        
+        if np.isinf(n_closest).any():
+            print("inf readings")
+            return np.array([0,0])
+
+        
         k_att = 1
 
-        num_dim = 2
+        num_dim = 20
 
-        x = xo
-        y = yo
+        odom_data = self.odom
+        x = odom_data.pose.pose.position.x
+        y = odom_data.pose.pose.position.y
+        x_dot = odom_data.twist.twist.linear.x
+        y_dot = odom_data.twist.twist.linear.y
+
+        x_goal = x + x_dot*self.dt
+        y_goal = y + y_dot*self.dt
+
+        rel_x = []
+        rel_y = []
+
+
+        #print(f"n_closest recieved: {n_closest} and length: {len(n_closest)}")
+        
+
+        #print(f"distance: {distance}")
+        #print(f"distance[0] {n_closest[0]}")
+
+        distances = n_closest[0]
+
+
+        mag = self.eta * (1 / self.q_star - 1 / n_closest[0]) / (n_closest[0]**2)
+        
+        print(f"mag {mag}")
+        x_obs = mag * np.cos(n_closest[1])
+        y_obs = mag * np.sin(n_closest[1])
+
+
+        print(f"x_obs: {x_obs}")
+        print(f"y_obs: {y_obs}")
+
+        #x_obs = np.rot90(x_obs)
+        #y_obs = np.rot90(y_obs)
+
+        if x_obs.size == 0:
+            return np.array([0,0])
 
         alpha = 0.6
 
         D_obs = 1.0
 
-        norm_factor = np.sqrt( (x-x_obs)**2+(y-y_obs)**2   )
+        norm_factor = np.sqrt( (x_obs)**2+(y_obs)**2   )
 
-        dist_obs = np.sqrt( (x-x_obs)**2+(y-y_obs)**2   )-D_obs ## h(x)
+        dist_obs = np.sqrt( (x_obs)**2+(y_obs)**2   )-D_obs ## h(x)
 
-        grad_hx = np.hstack(( (x-x_obs)/norm_factor,  (y-y_obs)/norm_factor)).reshape(1, num_dim)
+        grad_hx = np.hstack(( (x_obs)/norm_factor,  (y_obs)/norm_factor)).reshape(1, 20)
+
+        print(f"grad_hx {grad_hx.shape}")
 
         v_des = np.hstack(( -k_att*(x-x_goal), -k_att*(y-y_goal)))
+        v_des = np.tile(v_des, (1,10)).reshape(1,20)
+
+        print(f"v_des {v_des.shape}")
 
         Q = np.identity(num_dim)
         q = -v_des
         A_in = -grad_hx
         b_in = np.array( [alpha*dist_obs]  )
-        # print(np.shape(grad_hx))
+        print(f"shape: {np.shape(grad_hx)}")
+        cvxopt.matrix(q, tc = 'd')
+        cvxopt.matrix(Q, tc = 'd')
+        cvxopt.matrix(A_in, tc = 'd')
+        cvxopt.matrix(b_in, tc = 'd')
+        #sol_data = solvers.qp( cvxopt.matrix(Q, tc = 'd'), cvxopt.matrix(q, tc = 'd'), cvxopt.matrix(A_in, tc = 'd'), cvxopt.matrix(b_in, tc = 'd'), None, None  )
 
-        sol_data = solvers.qp( cvxopt.matrix(Q, tc = 'd'), cvxopt.matrix(q, tc = 'd'), cvxopt.matrix(A_in, tc = 'd'), cvxopt.matrix(b_in, tc = 'd'), None, None  )
+        #sol = np.asarray(sol_data['x'])
+        return np.array((0,0))#sol
+    
+    def compute_cbfa(self, n_closest: np.ndarray):
+
+        #return np.array([0, 0])
+        if self.odom == None:
+            print("No target")
+            return np.array([0, 0])
+
+        if np.isinf(n_closest).any():
+            print("inf readings")
+            return np.array([0, 0])
+
+        k_att = 1
+        num_dim = 20
+
+        odom_data = self.odom
+        x = odom_data.pose.pose.position.x
+        y = odom_data.pose.pose.position.y
+        x_dot = odom_data.twist.twist.linear.x
+        y_dot = odom_data.twist.twist.linear.y
+
+        x_goal = x + x_dot * self.dt
+        y_goal = y + y_dot * self.dt
+
+        mag = self.eta * (1 / self.q_star - 1 / n_closest[0]) / (n_closest[0] ** 2)
+
+        x_obs = mag * np.cos(n_closest[1])
+        y_obs = mag * np.sin(n_closest[1])
+
+        if x_obs.size == 0:
+            return np.array([0, 0])
+
+        alpha = 0.6
+        D_obs = 1.0
+        norm_factor = np.sqrt((x_obs) ** 2 + (y_obs) ** 2)
+        dist_obs = np.sqrt((x_obs) ** 2 + (y_obs) ** 2) - D_obs
+
+        # Set grad_hx to (2, 10) if that's the intended shape for A_in constraints
+        grad_hx = np.vstack((x_obs / norm_factor, y_obs / norm_factor)).reshape(10, 2)
+        A_in = - np.tile(grad_hx, (1, 10))
+
+        # Reshape v_des and q to be compatible
+        v_des = np.hstack((-k_att * (x - x_goal), -k_att * (y - y_goal)))
+        q = -np.tile(v_des, 10).reshape(num_dim, 1)  # Ensure q is a column vector (20, 1)
+
+        # Ensure Q is an identity matrix of shape (20, 20)
+        Q = np.identity(num_dim)
+
+        # Set A_in and b_in to be compatible with grad_hx
+        #A_in = -grad_hx  # Shape: (2, 10) for A_in derived from grad_hx
+        b_in = np.array([alpha * dist_obs]).reshape(10, 1)  # Ensure b_in is a column vector
+
+        # Call the solver
+        sol_data = solvers.qp(
+            cvxopt.matrix(Q, tc='d'),
+            cvxopt.matrix(q, tc='d'),
+            cvxopt.matrix(A_in, tc='d'),
+            cvxopt.matrix(b_in, tc='d'),
+            None,
+            None
+        )
 
         sol = np.asarray(sol_data['x'])
+        sol = np.array((sol[0,0], sol[1,0]))
         return sol
     
     def obstacle_avoidance(self, vel_vector: np.ndarray) -> np.ndarray:
-        if self.odom == None:
+        if self.odom == None or self.laser == None:
             print("No target")
-            return np.array([0,0])            
+            return np.array([0,0]) 
+
+        n_closest = self.n_laser_scan(10)
+        #print(f"n_closest from n_laser_scan that goes into computecbf {n_closest}")
+        res = self.compute_cbf(n_closest)
+        print(f"res: {res}") 
+
         
 
 
-        return np.array([vx, vy])
+        return res *2
      
     
     def calc_next_goal(self) -> np.ndarray:
@@ -218,6 +353,9 @@ class Traj_planner:
 
     def handle_odom(self, odom_data):
         self.odom = odom_data
+
+    def handle_laser(self, laser_data):
+        self.laser = laser_data
 
 def get_trajectory(trajectory_name: str) -> np.ndarray:
     """
