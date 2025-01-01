@@ -1,0 +1,10 @@
+<launch>
+  <node name="pointcloud_to_laserscan" pkg="pointcloud_to_laserscan" type="pointcloud_to_laserscan_node" output="screen">
+    <remap from="cloud_in" to="obs1_pcl_topic" />  
+    <param name="target_frame" value="bebop" />  
+  </node>
+
+
+  <node pkg="potential_field" type="point_cloud_circular.py" name="point_cloud_circular" output="screen" />
+
+</launch>
