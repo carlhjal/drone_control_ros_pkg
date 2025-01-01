@@ -1,0 +1,29 @@
+<?xml version="1.0"?>
+<launch>
+
+
+  <!-- to get position from gazebo -->
+  <!-- <include file="$(find get_pointcloud)/launch/get_pose_from_gazebo.launch"/> -->
+
+  <include file="$(find get_pointcloud)/launch/get_position_drone_from_optitrack.launch"/>
+  
+  
+  <include file="$(find get_pointcloud)/launch/get_position_obs_from_optitrack.launch"/>
+  
+  
+  
+  
+  #TODO
+  #One line
+  #include launch file for creating point cloud from obstacle center
+  #one line
+  #include launch file for converting point cloud to laser scan data
+  <!-- static transform between world to odom of drone -->
+  <node pkg="tf" type="static_transform_publisher" name="world_to_bebop_odom" args="0 0 0 0 0 0 world odom 100" />
+
+  <!-- call map less navigation -->
+  <include file="$(find bebop_navigation)/launch/map_less_navigation.launch"/>
+  <node name="rviz" pkg="rviz" type="rviz" args= #TODO provide your rviz config file , you can youse lab9 rviz config file/>
+</launch>
+
+

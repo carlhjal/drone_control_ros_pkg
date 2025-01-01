@@ -1,0 +1,10 @@
+<?xml version="1.0"?>
+<launch>
+  #TODO
+  #create a node name obs_optitrack_pose_broadcaster in  get_obs_poses_from_optitrack.py ( provided) to get the obstacle positions , take refernce from   get_pose_from_gazebo.py from lab8 except
+  #node and python script name
+  # obstacle name that you will get from from optitrack will be as obstacle_1 , obstacle_2 .... currently we have only one obstacle
+  <node pkg="get_pointcloud" type="#TODO" name="#TODO" output="screen">
+  </node>
+  
+</launch>
