@@ -3,13 +3,22 @@
   <!-- <include file="$(find potential_field)/launch/map.launch"/> -->
   <!--include file="$(find robotont_navigation)/launch/move_base.launch"/!-->
   <!--remap from="cmd_vel" to="cmd_vel_robotont"/!-->
-  <node pkg="tf" type="static_transform_publisher" name="odom_to_map"
+  <!-- <node pkg="tf" type="static_transform_publisher" name="odom_to_map"
    args="0 0 0 0 0 0 1 map odom 0"/>
   <node pkg="tf" type="static_transform_publisher" name="map_to_world"
-   args="0 0 0 0 0 0 1 world map 0"/>
-   
+   args="0 0 0 0 0 0 1 world map 0"/> -->
+   <arg name="world" default="gazebo_ros_range"/>
   <include file="$(find drone_ctrl)/launch/bebop_sim.launch"/>
 
+  <include file="$(find gazebo_ros)/launch/empty_world.launch">
+    <arg name="world_name" value="$(find
+      get_pointcloud)/models/small_arena_gazebo.world"/>
+    <arg name="paused" value="$(arg paused)"/>
+    <arg name="use_sim_time" value="$(arg use_sim_time)"/>
+    <arg name="gui" value="$(arg gui)"/>
+    <arg name="headless" value="$(arg headless)"/>
+    <arg name="debug" value="$(arg debug)"/>
+  </include>
   <!-- load map -->
   <node pkg="potential_field" name="potential_field" type="potential_field.py" output="screen"/>
   <node pkg="potential_field" name="compute_velocity" type="compute_velocity.py" output="screen"/>
