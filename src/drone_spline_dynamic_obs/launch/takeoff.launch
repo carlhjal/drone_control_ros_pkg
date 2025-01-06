@@ -1,0 +1,5 @@
+<launch>
+  <node pkg="drone_spline_dynamic_obs" type="drone_commands.py" name="takeoff" output="screen">
+    <param name="command" value="takeoff" />
+  </node>
+</launch>

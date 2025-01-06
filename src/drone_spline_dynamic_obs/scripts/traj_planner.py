@@ -100,6 +100,7 @@ class Traj_planner:
 
         self.odom = None
         self.laser = None
+
         
     def start(self):
         rate = rospy.Rate(self.sample_rate)
@@ -109,6 +110,8 @@ class Traj_planner:
             print(f"net_force before: {net_force}")
             # net_force += self.obstacle_avoidance(net_force)
             print(f"net_force after: {net_force}")
+
+            net_force = self.kp*net_force
             
             self.publish_sum(net_force[0],net_force[1])
             rate.sleep()
@@ -253,5 +256,5 @@ def get_trajectory(trajectory_name: str) -> np.ndarray:
 
 if __name__ == "__main__":
     
-    tp = Traj_planner("eight.npy")
+    tp = Traj_planner("circle.npy")
     tp.start()

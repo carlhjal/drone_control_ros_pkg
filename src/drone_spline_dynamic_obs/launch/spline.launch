@@ -30,4 +30,5 @@
   <!-- load map -->
   <node pkg="drone_spline_dynamic_obs" name="drone_spline_dynamic_obs" type="traj_planner.py" output="screen"/>
   <!-- <node type="rviz" name="rviz" pkg="rviz" args="-d $(find potential_field)/potential_field.rviz" /> -->
+
 </launch>
