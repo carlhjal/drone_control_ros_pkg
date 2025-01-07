@@ -89,7 +89,6 @@ class Traj_planner:
         self.robot_path_pub = rospy.Publisher("robot_path",Path,queue_size=10)
 
         #self.cmd_pub = rospy.Publisher("cmd_vel_robotont", Twist,queue_size=10)
-        self.v = 1
         self.dt = 0.1
         self.kp = 0.8
         self.kd = 0.2
