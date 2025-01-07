@@ -38,32 +38,23 @@ class PointcloudFromGz:
         x_points = center_x.reshape(-1,1) + radius * np.cos(points) #TODO #get list of  x coordinates which is on the circumference of circle with center center_x 
         y_points = center_y.reshape(-1,1) + radius * np.sin(points) #get list of  y coordinates which is on the circumference of circle with center center_y 
         z_points = height * np.ones((center_x.shape[0],points.shape[0])) #get the list z_points , in our case z points represent constant height h ,defined above .This list should be of same lenght of x_points  
-        
-        # x_points = center_x.reshape(-1, 1) + radius * np.cos(points)
-        # y_points = center_y.reshape(-1, 1) + radius * np.sin(points)
-        # z_points = height * np.ones_like(x_points)
+
         return x_points, y_points, z_points
     
     def publish_pc(self):
         """Generate points for obstacles as a point cloud."""
-        
         if self.obstacles.size == 0:
             return
-        print(self.obstacles)
-        print(self.obstacles[:,1])
         
         center_x = self.obstacles[:,0]
         center_y = self.obstacles[:,1]
 
-        xp, yp, zp = self.create_a_circle(center_x, center_y)  # Generate circle points
-        print("made the points")
-        # list_circular_point_list.append(points_circle)
+        xp, yp, zp = self.create_a_circle(center_x, center_y)
         xp,yp,zp = xp.reshape(-1),yp.reshape(-1),zp.reshape(-1)
         cloud_points = np.vstack((xp,yp,zp)).T
 
         header = Header()
         header.stamp = rospy.Time.now()
-        #header.frame_id = 'bebopbase_footprint'
         header.frame_id = 'odom'
         #create pcl from points
         scaled_polygon_pcl = pcl2.create_cloud_xyz32(header, cloud_points)
