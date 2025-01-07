@@ -91,8 +91,9 @@ class Traj_planner:
         #self.cmd_pub = rospy.Publisher("cmd_vel_robotont", Twist,queue_size=10)
         self.v = 1
         self.dt = 0.1
-        self.kp = 0.5
-        self.kd = 0.5
+        self.kp = 0.8
+        self.kd = 0.2
+        self.ki = 0.05
         
         self.q_star = 2
         self.obs_min_range = 0.02
@@ -100,7 +101,18 @@ class Traj_planner:
 
         self.odom = None
         self.laser = None
+        self.old_move_comm = np.array([0,0])
 
+        self.vx_1 = 0
+        self.vy_1 = 0
+
+        self.min_vel_x = -0.4
+        self.max_vel_x = 0.4
+        self.min_vel_y = -0.4
+        self.max_vel_y = 0.4
+
+        self.x_i = 0
+        self.y_i = 0
         
     def start(self):
         rate = rospy.Rate(self.sample_rate)
@@ -111,11 +123,35 @@ class Traj_planner:
             # net_force += self.obstacle_avoidance(net_force)
             print(f"net_force after: {net_force}")
 
-            net_force = self.kp*net_force
-            
+            net_force = self.filter_clip_speed(net_force)
+            # self.old_move_comm = 0.8*self.old_move_comm + 0.2*net_force
             self.publish_sum(net_force[0],net_force[1])
+            # self.publish_sum(self.old_move_comm[0], self.old_move_comm[1])
             rate.sleep()
 
+    def filter_clip_speed(self, net_force):
+            """
+            This function will clip the speed to some maximum value
+            and runs a low-pass filter on the inputs.
+            """
+            vel_x = net_force[0]
+            vel_y = net_force[1]
+
+            angle = np.arctan2(vel_y, vel_x)
+            mag = np.sqrt(vel_y**2 + vel_x**2)
+
+            vx = np.cos(angle)
+            vy = np.sin(angle)
+            vx = np.clip(vx, self.min_vel_x, self.max_vel_x) * mag
+            vy = np.clip(vy, self.min_vel_y, self.max_vel_y) * mag
+
+            vx = vx*1 + 0*self.vx_1
+            vy = vy*1 + 0*self.vy_1
+
+            self.vx_1 = vx
+            self.vy_1 = vy
+
+            return np.array([vx, vy])
 
     def n_laser_scan(self, n: int) -> list:
         if self.laser == None or self.odom == None:
@@ -221,8 +257,14 @@ class Traj_planner:
 
         self.waypoints = Waypoints(self.s, x_global_init=x, y_global_init=y, v=self.v, dt=self.dt)
         
+        self.x_i += self.waypoints.x_d - x
+        self.y_i += self.waypoints.y_d - y
+
         vx = self.kp*(self.waypoints.x_d - x) + self.kd*(self.waypoints.xd_dot - x_dot)
         vy = self.kp*(self.waypoints.y_d - y) + self.kd*(self.waypoints.yd_dot - y_dot)
+
+        vx += self.x_i*self.ki
+        vy += self.y_i*self.ki
 
         return np.array([vx, vy])
     
@@ -256,5 +298,5 @@ def get_trajectory(trajectory_name: str) -> np.ndarray:
 
 if __name__ == "__main__":
     
-    tp = Traj_planner("circle.npy")
+    tp = Traj_planner("eight.npy")
     tp.start()
