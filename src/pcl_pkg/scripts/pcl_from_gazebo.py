@@ -8,6 +8,7 @@ import tf.transformations
 from sensor_msgs.msg import PointCloud2
 from std_msgs.msg import Header
 import sensor_msgs.point_cloud2 as pcl2
+from message_filters import ApproximateTimeSynchronizer
 
 class PointcloudFromGz:
     def __init__(self):
@@ -15,8 +16,8 @@ class PointcloudFromGz:
         self.obstacles = np.array([])
         self.num_points = 50
         self.pointcloud_pub = rospy.Publisher("Obstacle_pointcloud", PointCloud2, queue_size=10)
-        rospy.Subscriber("/gazebo/model_states", ModelStates, self.obstacle_callback)
-        self.start()
+        self.gz_sub = rospy.Subscriber("/gazebo/model_states", ModelStates, self.publish_pc)
+        rospy.spin()
 
     def obstacle_callback(self, msg: ModelStates):
         if len(msg.name) <= 2:
@@ -41,8 +42,11 @@ class PointcloudFromGz:
 
         return x_points, y_points, z_points
     
-    def publish_pc(self):
+    def publish_pc(self, msg):
         """Generate points for obstacles as a point cloud."""
+
+        self.obstacle_callback(msg)
+
         if self.obstacles.size == 0:
             return
         
@@ -59,12 +63,6 @@ class PointcloudFromGz:
         #create pcl from points
         scaled_polygon_pcl = pcl2.create_cloud_xyz32(header, cloud_points)
         self.pointcloud_pub.publish(scaled_polygon_pcl)
-
-    def start(self):
-        rate = rospy.Rate(10)        
-        while not rospy.is_shutdown():
-            self.publish_pc()
-            rate.sleep()
 
 
 if __name__ == "__main__":
