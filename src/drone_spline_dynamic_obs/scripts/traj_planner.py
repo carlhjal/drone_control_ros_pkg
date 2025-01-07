@@ -41,8 +41,6 @@ class Waypoints:
         Contains:
 
         """
-        #x_global_init = 0
-        #y_global_init = 0
         (self.x_waypoints, 
          self.y_waypoints, 
          self.phi_Waypoints, 
@@ -62,12 +60,10 @@ class Waypoints:
                                                 spline_obj.y_d_dot_path,
                                                 v,
                                                 dt)
-        
-        
 
 class Traj_planner:
     def __init__(self, trajectory: np.ndarray):
-        self.v = 0.5
+        self.v = 0.8
         self.dt = 0.1
 
         self.s = Spline(get_trajectory(trajectory))
@@ -118,9 +114,11 @@ class Traj_planner:
         self.y_i = 0
         
         self.pause = False
+        self.filter_alpha = 1
         
     def start(self):
         rate = rospy.Rate(self.sample_rate)
+        
         while not rospy.is_shutdown():
             if self.pause:
                 rospy.loginfo("Pausing for 5 seconds...")
@@ -129,14 +127,10 @@ class Traj_planner:
 
             net_force = self.calc_next_goal()
             self.n_laser_scan(10)
-            print(f"net_force before: {net_force}")
-            # net_force += self.obstacle_avoidance(net_force)
-            print(f"net_force after: {net_force}")
 
-            net_force = self.filter_clip_speed(net_force)
-            # self.old_move_comm = 0.8*self.old_move_comm + 0.2*net_force
+            #net_force = self.filter_clip_speed(net_force)
             self.publish_sum(net_force[0],net_force[1])
-            # self.publish_sum(self.old_move_comm[0], self.old_move_comm[1])
+            print(f"net force: {net_force}")
             rate.sleep()
 
     def pause_callback(self, msg):
@@ -145,7 +139,7 @@ class Traj_planner:
     def filter_clip_speed(self, net_force):
             """
             This function will clip the speed to some maximum value
-            and runs a low-pass filter on the inputs.
+            and runs a low-pass filter on the inputs if configured
             """
             vel_x = net_force[0]
             vel_y = net_force[1]
@@ -158,8 +152,8 @@ class Traj_planner:
             vx = np.clip(vx, self.min_vel_x, self.max_vel_x) * mag
             vy = np.clip(vy, self.min_vel_y, self.max_vel_y) * mag
 
-            vx = vx*1 + 0*self.vx_1
-            vy = vy*1 + 0*self.vy_1
+            vx = self.filter_alpha*vx + (1-self.filter_alpha)*self.vx_1
+            vy = self.filter_alpha*vy + (1-self.filter_alpha)*self.vy_1
 
             self.vx_1 = vx
             self.vy_1 = vy
@@ -183,14 +177,10 @@ class Traj_planner:
         idx = np.argpartition(ranges, n)[:n]
         angles = resolution * idx
         distances = ranges[idx]
-        #print(f"angles {angles}")
-        #print(f"distances {distances}")
         
         n_closest = np.vstack((distances, angles))
 
-        #print(f"n_closest {n_closest}")
         print(n_closest.shape)
-        #n_closest = np.rot90(n_closest).tolist()
         return n_closest
     
 
@@ -276,8 +266,13 @@ class Traj_planner:
         vx = self.kp*(self.waypoints.x_d - x) + self.kd*(self.waypoints.xd_dot - x_dot)
         vy = self.kp*(self.waypoints.y_d - y) + self.kd*(self.waypoints.yd_dot - y_dot)
 
+        print(f"x waypoints: {self.waypoints.x_waypoints}")
+        print(f"x_d: {self.waypoints.x_d}")
+
         vx += self.x_i*self.ki
         vy += self.y_i*self.ki
+
+        print(f"vx: {vx}, vy: {vy}")
 
         return np.array([vx, vy])
     
@@ -292,6 +287,17 @@ class Traj_planner:
 #--------------------------------------------------------#
 #                     helper functions                   #
 #--------------------------------------------------------#
+    # look into deleting this
+    def publish_robot_path(self):
+        path = Path()
+        path.header.stamp = rospy.Time.now()
+        path.header.frame_id = 'odom'
+        for x, y in zip(self.waypoints.x_waypoints, self.waypoints.y_waypoints):
+            pose = PoseStamped()
+            pose.pose.position.x = x
+            pose.pose.position.y = y
+            path.poses.append(pose)
+        self.robot_path_pub.publish(path)
 
     def handle_odom(self, odom_data):
         self.odom = odom_data
