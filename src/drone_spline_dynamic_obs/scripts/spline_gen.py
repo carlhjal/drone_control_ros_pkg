@@ -9,7 +9,9 @@ def path_spline(x_path: np.ndarray, y_path: np.ndarray) -> tuple: # x(s), y(s), 
     phi = np.hstack(( phi_init, phi  ))
     arc = np.cumsum( np.sqrt( x_diff**2+y_diff**2 )   )
     arc_length = arc[-1]
+    print(f"arc length: {arc_length}, np.shape(x_path[0]): {np.shape(x_path)[0]}")
     arc_vec = np.linspace(0, arc_length, np.shape(x_path)[0])
+    print(f"arc vec: {arc_vec}")
     cs_x_path = CubicSpline(arc_vec, x_path)
     cs_y_path = CubicSpline(arc_vec, y_path)
     cs_phi_path = CubicSpline(arc_vec, phi)
@@ -26,6 +28,6 @@ def waypoint_generator(x_global_init, y_global_init, x_path_data, y_path_data, a
     phi_Waypoints = cs_phi_path(arc_pred)
     x_d = cs_x_path(arc_pred)
     y_d = cs_y_path(arc_pred)
-    xd_dot = cs_xdot_path(arc_pred)*v
-    yd_dot = cs_ydot_path(arc_pred)*v
+    xd_dot = cs_xdot_path(arc_pred)#*v
+    yd_dot = cs_ydot_path(arc_pred)#*v
     return x_waypoints, y_waypoints, phi_Waypoints, xd_dot, yd_dot, x_d, y_d
