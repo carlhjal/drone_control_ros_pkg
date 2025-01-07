@@ -3,7 +3,7 @@
 from visualization_msgs.msg import Marker,MarkerArray
 import roslib, sys, rospy
 from sensor_msgs.msg import LaserScan
-from std_msgs.msg import Float32
+from std_msgs.msg import Float32, Empty
 from nav_msgs.msg import Odometry,Path
 from geometry_msgs.msg import Point, Twist, PoseStamped
 import numpy as np
@@ -88,10 +88,14 @@ class Traj_planner:
         #This is a publisher to publish the robot path. In the videos it is highlighted by red color.
         self.robot_path_pub = rospy.Publisher("robot_path",Path,queue_size=10)
 
+        rospy.Subscriber('/bebop/reset', Empty, self.pause_callback)
+        rospy.Subscriber('/bebop/takeoff', Empty, self.pause_callback)
+        rospy.Subscriber('/bebop/land', Empty, self.pause_callback)
+
         #self.cmd_pub = rospy.Publisher("cmd_vel_robotont", Twist,queue_size=10)
         self.dt = 0.1
-        self.kp = 0.8
-        self.kd = 0.2
+        self.kp = 1
+        self.kd = 0.05
         self.ki = 0.05
         
         self.q_star = 2
@@ -113,9 +117,16 @@ class Traj_planner:
         self.x_i = 0
         self.y_i = 0
         
+        self.pause = False
+        
     def start(self):
         rate = rospy.Rate(self.sample_rate)
         while not rospy.is_shutdown():
+            if self.pause:
+                rospy.loginfo("Pausing for 5 seconds...")
+                rospy.sleep(5)
+                self.pause = False
+
             net_force = self.calc_next_goal()
             self.n_laser_scan(10)
             print(f"net_force before: {net_force}")
@@ -127,6 +138,9 @@ class Traj_planner:
             self.publish_sum(net_force[0],net_force[1])
             # self.publish_sum(self.old_move_comm[0], self.old_move_comm[1])
             rate.sleep()
+
+    def pause_callback(self, msg):
+        self.pause = True
 
     def filter_clip_speed(self, net_force):
             """
