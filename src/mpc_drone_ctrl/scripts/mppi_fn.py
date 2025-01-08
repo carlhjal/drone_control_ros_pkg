@@ -14,7 +14,7 @@ class MPPIControllerForPathTracking():
             max_vel: float = 5.000, # [m/s^2]
             horizon_step_T: int = 30,
             number_of_samples_K: int = 1000,
-            param_exploration: float = 0.0,
+            param_exploration: float = 0.1,
             param_lambda: float = 50.0,
             param_alpha: float = 1.0,
             sigma = jnp.diag(jnp.array([0.5,0.1])), 

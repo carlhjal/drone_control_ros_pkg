@@ -126,7 +126,8 @@ class Traj_planner:
                 self.pause = False
 
             net_force = self.calc_next_goal()
-            self.n_laser_scan(10)
+            # self.n_laser_scan(10)
+            net_force += self.obstacle_avoidance(net_force)
 
             #net_force = self.filter_clip_speed(net_force)
             self.publish_sum(net_force[0],net_force[1])
@@ -203,7 +204,7 @@ class Traj_planner:
         y = odom_data.pose.pose.position.y
 
         alpha = 0.6
-        D_obs = 1.0
+        D_obs = 0.1
         
 
         distances = n_closest[0] - D_obs
@@ -245,7 +246,7 @@ class Traj_planner:
         #print(f"n_closest from n_laser_scan that goes into computecbf {n_closest}")
         res = self.compute_cbf(n_closest)
         #print(f"res: {res}") 
-        return res
+        return res * 0.5
      
     def calc_next_goal(self) -> np.ndarray:
         if self.odom == None:
@@ -269,12 +270,12 @@ class Traj_planner:
         print(f"x waypoints: {self.waypoints.x_waypoints}")
         print(f"x_d: {self.waypoints.x_d}")
 
-        vx += self.x_i*self.ki
-        vy += self.y_i*self.ki
+        vx += self.x_i*self.ki*self.dt
+        vy += self.y_i*self.ki*self.dt
 
         print(f"vx: {vx}, vy: {vy}")
 
-        return np.array([vx, vy])
+        return np.array([vx, vy]) * 1.5
     
         #self.average_movement_random_motion = np.roll(self.average_movement_random_motion, 1, axis=0)
     

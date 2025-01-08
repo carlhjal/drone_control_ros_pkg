@@ -1,6 +1,5 @@
 #!/usr/bin/env python3
 
-
 import rospy, tf
 import geometry_msgs.msg, nav_msgs.msg
 from gazebo_msgs.msg import ModelStates
@@ -12,10 +11,16 @@ import tf.transformations
 from time import time
 from jax import random, lax
 import threading
+from sensor_msgs.msg import LaserScan
 
 husky_state = [0., 0., 0.]
 obstacles = []
 msg = geometry_msgs.msg.Twist()
+laser = LaserScan()
+
+def handle_laser(laser_data):
+    global laser
+    laser = laser_data
 
 def publish_command(pub, optimal_input):
     msg.linear.x = optimal_input[0]
@@ -32,29 +37,48 @@ def odom_callback(msg):
     pose = [pos.position.x, pos.position.y, th]
     husky_state = pose
 
-def obstacle_callback(msg: ModelStates):
-    global obstacles
-    if len(msg.name) <= 2:
-        return
-    
-    obstacles = []
-    for i in range(2, len(msg.name)):
-        if msg.name[i].startswith("unit"):
-            pose = msg.pose[i]
-            x = pose.position.x
-            y = pose.position.y
-            obstacles.append([x, y, 0.3])
+def n_laser_scan_tocart(n: int=10, radius: int=1.6) -> list:
+    if laser == None or husky_state == None:
+        return np.array([0.,0.])
 
-    obstacles = np.array(obstacles)
-    #obstacles.append([msg.pose[i].position.x, msg.pose[i].position.y])
+    laser_data = laser
+    ranges = np.array(laser_data.ranges)
+    angle = laser_data.angle_min
+    resolution = laser_data.angle_increment
+    vector_sum = np.array([0.0,0.0])
+
+    idx = np.argpartition(ranges, n)[:n]
+    angles = resolution * idx
+    distances = ranges[idx]
+    
+    # n_closest = np.vstack((distances, angles))
+    print(f"husky state: {husky_state}")
+    x = distances*np.cos(angles) + husky_state[0]
+    y = distances*np.sin(angles) + husky_state[1]
+    r = np.ones_like(x)*radius
+
+    n_closest = []
+
+    # print(f"x: {x}")
+    # print(f"y: {y}")
+    # print(f"r: {r}")
+    # n_closest = np.vstack(([x, y, r]))
+
+    for i in range(len(x)):
+        n_closest.append([x[i], y[i], r[i]])
+
+    # print(f"n_closest: {n_closest}")
+
+    # print(n_closest.shape)
+    return n_closest
 
 def run_node():
     rospy.init_node('bebop_control',anonymous=True)
-    rospy.Subscriber("/gazebo/model_states", ModelStates, obstacle_callback)
     rospy.Subscriber("/bebop/odom", nav_msgs.msg.Odometry, odom_callback)
     #rospy.sleep(0.02)
 
 def optimizer():
+    global obstacles
     delta_t = 0.05
     sim_steps = 10000
 
@@ -99,11 +123,13 @@ def optimizer():
     key = random.PRNGKey(0)
     # simulation loop
     for i in range(sim_steps):
+        obstacles = n_laser_scan_tocart()
+        print(f"obstacles: {obstacles}")
         key, subkey = random.split(key)
         start_time = time()
         current_state = jnp.array(husky_state)
         ref_x, ref_y, ref_yaw, ref_v = npy_ob.get_nearest_waypoint(np.asarray(current_state[0]),np.asarray(current_state[1]))
-        print(f"obstacles: {obstacles}")
+        
         mppi.obstacle_circles = jnp.array(obstacles)
 
         ref_x = jnp.asarray(ref_x)
@@ -123,11 +149,14 @@ def optimizer():
         optimal_traj_new = optimal_traj[:, 0:2]
         sampled_traj_list_new = sampled_traj_list[:, :, 0:2]
 
-        # current_state = mppi.rk4(current_state,optimal_input)
-        print(f"optimal_input: {optimal_input}")
+        current_state = mppi.rk4(current_state,optimal_input)
+        print(optimal_input)
 
         publish_command(pub, optimal_input)
         rate.sleep()
+
+laser_sub = rospy.Subscriber("/scan", LaserScan, handle_laser)
+
 
 if __name__ == "__main__":
     run_node()

@@ -32,7 +32,7 @@ class PointcloudFromGz:
 
         self.obstacles = np.array(obstacles)
 
-    def create_a_circle(self, center_x: np.ndarray, center_y: np.ndarray, radius=1, height=1):
+    def create_a_circle(self, center_x: np.ndarray, center_y: np.ndarray, radius=0.6, height=1):
         list_circular_point= []
         points = np.arange(0,2*np.pi,np.pi/180)
         x_points = center_x.reshape(-1,1) + radius * np.cos(points) #TODO #get list of  x coordinates which is on the circumference of circle with center center_x 
